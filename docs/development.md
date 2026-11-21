@@ -30,19 +30,20 @@ The tests use a disposable Firefox profile and bind their fixture server to the 
 
 Pull requests and branch pushes run the test workflow against stable Firefox and Firefox 140.0 ESR. On `main` and `v*` tags, the release workflow calls the same tests and downloads the exact XPI tested on stable Firefox. A failed test prevents publication.
 
-The version in `extension/manifest.json` is the release version. Use three numeric components, `MAJOR.MINOR.PATCH`. Merging a new version into `main` creates the matching `vMAJOR.MINOR.PATCH` tag and GitHub release. Pushing a matching tag also supports a tag-driven release. An existing published version is skipped. **Actions > Release > Run workflow** can retry a release after an infrastructure failure. Select the intended commit's branch or tag.
+The version in `extension/manifest.json` is the release version. Use three numeric components, `MAJOR.MINOR.PATCH`. Merging a new version into `main` creates the matching `vMAJOR.MINOR.PATCH` tag and GitHub release. Pushing a matching tag also supports a tag-driven release. To sign the current published version or retry an interrupted submission, open **Actions > Release > Run workflow** and select `main`. [Release workflow](https://github.com/JustKato/meme-extension/actions/workflows/release.yml)
 
-The release includes the XPI and `SHA256SUMS`. After downloading both, run `sha256sum -c SHA256SUMS` in the download directory. When both signed and unsigned packages are published, download both to verify the complete checksum file.
+The release includes the XPI and `SHA256SUMS`. Download the files named in the checksum list and run `sha256sum -c SHA256SUMS` in the download directory. A signed XPI added after publication has its own `.xpi.sha256` file. Download that pair and run `sha256sum -c meme-extension-<version>.xpi.sha256`.
 
 ## Mozilla signing
 
 Without signing credentials, GitHub publishes the tested `-unsigned.xpi` for temporary loading. Standard Firefox requires a Mozilla signature for permanent installation. [Mozilla signing and distribution](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)
 
-To attach a signed XPI to future releases, create an AMO API key for the add-on owner and set both repository Actions secrets before releasing.
+1. Sign in to Mozilla Add-ons (AMO) with the account that owns the extension. For a first submission, use the account that should own future updates. Enable two-factor authentication and accept the Firefox Add-on Distribution Agreement if prompted. [AMO API credentials](https://addons.mozilla.org/en-US/developers/addon/api/key/)
+2. Use your existing JWT credentials or generate a pair. Complete Mozilla's email confirmation if prompted. Store the two values under **New repository secret** in the repository's Actions settings. [GitHub Actions secrets](https://github.com/JustKato/meme-extension/settings/secrets/actions)
 
 | GitHub Actions secret | AMO API credential |
 | --- | --- |
 | `AMO_JWT_ISSUER` | JWT issuer |
 | `AMO_JWT_SECRET` | JWT secret |
 
-The release job requests unlisted signing with `web-ext sign` and attaches the returned signed XPI alongside the tested unsigned build. The unlisted channel supports distribution on GitHub. Partial credentials or a signing error fail the publish job. [Mozilla web-ext signing reference](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/#web-ext-sign)
+Run the Release workflow on `main` after saving the secrets. It requests **unlisted** signing so users can install the signed XPI directly from GitHub. To add a signature to an existing release, the workflow uses that release's unsigned XPI and checks its contents against the tag. The signed download is named `meme-extension-<version>.xpi`. Future releases use the same credentials. [Mozilla signing reference](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/#web-ext-sign)

@@ -16,7 +16,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     needs: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     concurrency:
       group: publish-firefox-release
       cancel-in-progress: false
@@ -28,9 +28,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
-      - name: Check version and existing release
-        id: version
-        shell: bash
+      - name: Check release and Mozilla credential availability
+        id: release
+        env:
+          HAS_ISSUER: ${{ secrets.AMO_JWT_ISSUER != '' }}
+          HAS_SECRET: ${{ secrets.AMO_JWT_SECRET != '' }}
         run: |
           version=$(jq -er .version extension/manifest.json)
           [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
@@ -39,54 +41,124 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match manifest version $version"
             exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "number=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "$tag" --json isDraft --jq '.isDraft' | grep -qx false; then
-            echo "Release $tag is already published"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            if git show-ref --verify --quiet "refs/tags/$tag"; then
-              [[ "$(git rev-list -n 1 "$tag")" == "$(git rev-parse HEAD)" ]]
-            fi
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+          if [[ "$HAS_ISSUER" != "$HAS_SECRET" ]]; then
+            echo "::error::Configure both AMO_JWT_ISSUER and AMO_JWT_SECRET."
+            exit 1
           fi
-      - if: steps.version.outputs.publish == 'true'
+          signed="meme-extension-$version.xpi"
+          status=$(curl --silent --show-error --retry 3 --output "$RUNNER_TEMP/release.json" \
+            --write-out '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$tag")
+          case "$status" in
+            200)
+              release="$RUNNER_TEMP/release.json"
+              jq -e '.draft == false' "$release" > /dev/null
+              if jq -e --arg name "$signed" '.assets | any(.name == $name)' "$release" > /dev/null; then
+                mode=done
+                # A backfill uploads its checksum first and updates notes last.
+                if jq -e --arg name "$signed.sha256" \
+                  'any(.assets[]; .name == $name) and ((.body // "") | contains("<!-- signed-xpi -->") | not)' "$release" > /dev/null; then
+                  mode=notes
+                fi
+              elif [[ "$HAS_ISSUER" == false ]]; then
+                mode=missing
+              else
+                jq -e '.immutable != true' "$release" > /dev/null || { echo "::error::Release is immutable."; exit 1; }
+                mode=backfill
+              fi ;;
+            404)
+              mode=new
+              if git show-ref --verify --quiet "refs/tags/$tag"; then
+                [[ "$(git rev-list -n 1 "$tag")" == "$(git rev-parse HEAD)" ]]
+              fi ;;
+            *) echo "::error::GitHub release lookup failed (HTTP $status)."; exit 1 ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          signing=false
+          if [[ "$HAS_ISSUER" == true && ( "$mode" == new || "$mode" == backfill ) ]]; then signing=true; fi
+          echo "signing=$signing" >> "$GITHUB_OUTPUT"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "SIGNED=$signed" >> "$GITHUB_ENV"
+          echo "UNSIGNED=meme-extension-$version-unsigned.xpi" >> "$GITHUB_ENV"
+      - name: Signing unavailable (AMO credentials missing)
+        if: steps.release.outputs.mode == 'missing'
+        run: echo "::notice::To sign $TAG, add both AMO Actions secrets and rerun Release from main."
+      - if: steps.release.outputs.mode == 'new'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: firefox-xpi
           path: dist
-      - if: steps.version.outputs.publish == 'true'
+      - name: Download and verify the published unsigned XPI
+        if: steps.release.outputs.mode == 'backfill'
+        run: |
+          gh release download "$TAG" --pattern "$UNSIGNED" --pattern SHA256SUMS --dir dist
+          checksum=$(cd dist && sha256sum "$UNSIGNED")
+          grep -Fx -- "$checksum" dist/SHA256SUMS
+          jq -e --arg name "$UNSIGNED" --arg digest "sha256:${checksum%% *}" \
+            'any(.assets[]; .name == $name and .digest == $digest)' "$RUNNER_TEMP/release.json" > /dev/null
+      - if: steps.release.outputs.signing == 'true'
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
-      - name: Prepare release assets
-        if: steps.version.outputs.publish == 'true'
+      - name: Prepare signing tools and verify the unsigned payload
+        if: steps.release.outputs.signing == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.number }}
+          MODE: ${{ steps.release.outputs.mode }}
+        run: |
+          source_ref="$GITHUB_SHA"
+          if [[ "$MODE" == backfill ]]; then source_ref="refs/tags/$TAG"; fi
+          python3 scripts/verify-xpi.py --source-ref "$source_ref" "dist/$UNSIGNED"
+          npm ci --ignore-scripts
+      - name: Request or retrieve Mozilla's unlisted signature
+        if: steps.release.outputs.signing == 'true'
+        env:
           WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
           WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-        shell: bash
+        run: node scripts/sign-xpi.mjs "dist/$UNSIGNED" "dist/$SIGNED" "$VERSION"
+      - name: Verify signed payload and permanently install in Firefox
+        if: steps.release.outputs.signing == 'true'
         run: |
-          test -s "dist/meme-extension-$VERSION-unsigned.xpi"
-          if [[ -n "$WEB_EXT_API_KEY" && -n "$WEB_EXT_API_SECRET" ]]; then
-            npm ci --ignore-scripts
-            npx --no-install web-ext sign --source-dir extension --channel unlisted --artifacts-dir "$RUNNER_TEMP/signed"
-            cp "$RUNNER_TEMP"/signed/*.xpi "dist/meme-extension-$VERSION.xpi"
+          python3 scripts/verify-xpi.py "dist/$UNSIGNED" "dist/$SIGNED"
+          node scripts/check-signed-install.cjs "dist/$SIGNED"
+      - name: Attach signed XPI to the existing release
+        if: steps.release.outputs.mode == 'backfill'
+        run: |
+          cd dist
+          sha256sum "$SIGNED" > "$SIGNED.sha256"
+          if jq -e --arg name "$SIGNED.sha256" 'any(.assets[]; .name == $name)' "$RUNNER_TEMP/release.json" > /dev/null; then
+            gh release download "$TAG" --pattern "$SIGNED.sha256" --dir "$RUNNER_TEMP"
+            cmp "$SIGNED.sha256" "$RUNNER_TEMP/$SIGNED.sha256"
+          else
+            gh release upload "$TAG" "$SIGNED.sha256"
+          fi
+          gh release upload "$TAG" "$SIGNED"
+      - name: Add permanent install instructions to existing release notes
+        if: steps.release.outputs.mode == 'backfill' || steps.release.outputs.mode == 'notes'
+        run: |
+          gh release view "$TAG" --json body --jq '.body // ""' > "$RUNNER_TEMP/original.md"
+          if ! grep -Fq '<!-- signed-xpi -->' "$RUNNER_TEMP/original.md"; then
+            url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG"
+            {
+              echo '<!-- signed-xpi -->'
+              echo "For permanent installation in Firefox, download the [Mozilla-signed XPI]($url/$SIGNED). [SHA-256 checksum]($url/$SIGNED.sha256)"
+              echo
+              cat "$RUNNER_TEMP/original.md"
+            } > "$RUNNER_TEMP/notes.md"
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+      - name: Publish the tested version
+        if: steps.release.outputs.mode == 'new'
+        run: |
+          test -s "dist/$UNSIGNED"
+          if [[ -f "dist/$SIGNED" ]]; then
             echo 'Install the Mozilla-signed XPI in Firefox. The unsigned XPI is also available for temporary loading.' > "$RUNNER_TEMP/notes.md"
-          elif [[ -n "$WEB_EXT_API_KEY" || -n "$WEB_EXT_API_SECRET" ]]; then
-            echo '::error::Configure both AMO signing secrets.'
-            exit 1
           else
             echo 'Download the unsigned XPI, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the XPI. Firefox removes temporary add-ons when it restarts.' > "$RUNNER_TEMP/notes.md"
           fi
           echo >> "$RUNNER_TEMP/notes.md"
-          echo "See the [keyboard controls and installation guide](https://github.com/$GITHUB_REPOSITORY/blob/v$VERSION/README.md)." >> "$RUNNER_TEMP/notes.md"
+          echo "See the [keyboard controls and installation guide](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/README.md)." >> "$RUNNER_TEMP/notes.md"
           (cd dist && sha256sum *.xpi > SHA256SUMS)
-      - name: Publish the tested version
-        if: steps.version.outputs.publish == 'true'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
           gh release create "$TAG" dist/*.xpi dist/SHA256SUMS --target "$GITHUB_SHA" \
             --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
