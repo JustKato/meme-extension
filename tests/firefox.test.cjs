@@ -2,10 +2,13 @@ const { before, after, test } = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const path = require("node:path");
-const { Builder, Key } = require("selenium-webdriver");
+const { Builder, By, Key } = require("selenium-webdriver");
 const firefox = require("selenium-webdriver/firefox");
 const { Command } = require("selenium-webdriver/lib/command");
 const manifest = require("../extension/manifest.json");
+const addonId = manifest.browser_specific_settings.gecko.id;
+const testUuid = "5899f06c-f848-40f6-ab29-3c8f04372ece";
+const popupUrl = `moz-extension://${testUuid}/${manifest.action.default_popup}`;
 
 let driver, server, origin, markup = "";
 const child = '<button onclick="this.dataset.clicked=1">Inside frame</button>';
@@ -24,10 +27,12 @@ before(async () => {
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   origin = `http://127.0.0.1:${server.address().port}`;
   const options = new firefox.Options().addArguments("-headless")
+    .setPreference("extensions.webextensions.uuids", JSON.stringify({ [addonId]: testUuid }))
     .setPreference("general.smoothScroll", false)
     .setPreference("accessibility.typeaheadfind", false);
   if (process.env.FIREFOX_BIN) options.setBinary(process.env.FIREFOX_BIN);
-  const service = new firefox.ServiceBuilder(process.env.GECKODRIVER_BIN || "geckodriver").setHostname("127.0.0.1");
+  const service = new firefox.ServiceBuilder(process.env.GECKODRIVER_BIN || "geckodriver")
+    .setHostname("127.0.0.1").addArguments("--allow-system-access"); // Native Firefox toolbar UI tests
   driver = await new Builder().forBrowser("firefox").setFirefoxOptions(options).setFirefoxService(service).build();
   await driver.manage().window().setRect({ width: 1100, height: 820 });
   // Firefox 140 reads scripts lazily. Keep the XPI on disk for the whole session
@@ -264,4 +269,124 @@ test("hint styling and hit testing work on a page with a strict style policy", a
   assert.deepEqual(styles, ["none", "absolute", 18]);
   await keys("b");
   assert.equal(await js("return location.hash"), "#finish");
+});
+
+
+require("./shortcut-cases.cjs")({ getDriver: () => driver, load, js, keys, until, getOrigin: () => origin, popupUrl });
+
+// Marionette drives the native toolbar button. An extension tab observes the
+// resulting popup using Firefox's getViews API while the fixture stays active.
+function inPopup(script, ...args) {
+  return js(`const view = browser.extension.getViews({ type: "popup" })[0];
+    if (!view) return null;
+    const doc = view.document;
+    ${script}`, ...args);
+}
+
+async function pressToolbarButton() {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    const selector = `toolbarbutton.webextension-browser-action[data-extensionid="${addonId}"]`;
+    await driver.findElement(By.css(selector)).click();
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+  await until(() => inPopup("return doc.querySelector('#tab-toggle') && !doc.querySelector('#tab-toggle').disabled"),
+    "Firefox opened the toolbar popup on the fixture");
+}
+
+async function withToolbar(check) {
+  const site = await driver.getWindowHandle();
+  const siteUrl = await driver.getCurrentUrl();
+  await driver.switchTo().newWindow("tab");
+  const observer = await driver.getWindowHandle();
+  try {
+    await driver.get(popupUrl);
+    await until(() => js("return document.querySelector('#tab-status').textContent === 'Unavailable on this page'"),
+      "the popup disables its tab switch on an extension page");
+    assert.ok(await js("return document.querySelector('#tab-toggle').disabled"));
+    await js(async function (url) {
+      const tabs = await browser.tabs.query({ currentWindow: true });
+      const fixture = tabs.find(tab => tab.url === url);
+      await browser.tabs.update(fixture.id, { active: true });
+    }, siteUrl);
+    await pressToolbarButton();
+    await check();
+  } finally {
+    await driver.switchTo().window(observer);
+    await driver.close();
+    await driver.switchTo().window(site);
+  }
+}
+
+test("the native Firefox toolbar icon opens the menu and its switch controls the current page", async () => {
+  await load("<button>Visible action</button>", "/toolbar");
+  await keys("q");
+  await withToolbar(async () => {
+    assert.equal(await inPopup("return doc.querySelector('#tab-toggle').getAttribute('aria-checked')"), "false");
+    assert.equal(await inPopup("return doc.querySelector('#tab-status').textContent"), "Off for this tab");
+    const icons = await js(async function () {
+      const manifest = browser.runtime.getManifest();
+      const registered = new Map([...Object.entries(manifest.icons), ...Object.entries(manifest.action.default_icon)]);
+      return Promise.all([...registered].map(async ([size, file]) => {
+        const image = new Image();
+        image.src = browser.runtime.getURL(file);
+        await image.decode();
+        return [Number(size), image.naturalWidth, image.naturalHeight];
+      }));
+    });
+    assert.ok(icons.some(([size]) => size === 16));
+    assert.ok(icons.some(([size]) => size >= 64));
+    for (const [size, width, height] of icons) assert.deepEqual([width, height], [size, size]);
+    await inPopup("doc.querySelector('#tab-toggle').click()");
+    await until(() => inPopup("return doc.querySelector('#tab-toggle').getAttribute('aria-checked') === 'true'"),
+      "menu reflects the enabled tab");
+  });
+  await keys("a");
+  await expectLabels(["a"]);
+  await keys(Key.ESCAPE);
+});
+
+test("the toolbar shortcut editor records, disables, persists and restores a binding", async () => {
+  await load('<div style="height:400vh">Scrollable page</div>', "/shortcut-editor");
+  const record = '[data-command="scrollDown"] [data-record]';
+  const enabled = '[data-command="scrollDown"] [data-enabled]';
+  const click = selector => inPopup("doc.querySelector(arguments[0]).click()", selector);
+  const keyLabel = () => inPopup("return doc.querySelector(arguments[0])?.textContent.trim()", record);
+  async function openEditor() {
+    await click("#open-shortcuts");
+    await until(() => inPopup("return Boolean(doc.querySelector(arguments[0])?.getClientRects().length)", record),
+      "shortcut editor displays the binding");
+  }
+  async function reopen() {
+    await inPopup("view.close()");
+    await until(() => js("return !browser.extension.getViews({type:'popup'}).length"), "previous popup closed");
+    await pressToolbarButton();
+    await openEditor();
+  }
+
+  await withToolbar(async () => {
+    await openEditor();
+    assert.equal(await keyLabel(), "j");
+    await click(record);
+    await until(() => inPopup("return doc.activeElement.id === 'capture-shortcut'"), "the recorder takes focus");
+    await inPopup(`const input = doc.querySelector('#capture-shortcut');
+      input.dispatchEvent(new view.KeyboardEvent('keydown',
+        { key: 'z', code: 'KeyZ', bubbles: true, cancelable: true }));`);
+    await until(async () => await keyLabel() === "z", "recorder shows the new binding");
+    await click(enabled);
+    await reopen();
+    assert.equal(await keyLabel(), "z");
+    assert.equal(await inPopup("return doc.querySelector(arguments[0]).checked", enabled), false);
+    await click(enabled);
+    await reopen();
+    assert.equal(await inPopup("return doc.querySelector(arguments[0]).checked", enabled), true);
+    await click("#reset-shortcuts");
+    await click("#confirm-reset");
+    await until(async () => await keyLabel() === "j", "confirmed reset restores the original binding");
+  });
+  await keys("z");
+  assert.equal(await js("return scrollY"), 0);
+  await keys("j");
+  await until(() => js("return scrollY > 0"), "restored binding scrolls the website");
 });

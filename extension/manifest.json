@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Meme Keyboard Navigation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scroll with j and k, jump with g and G, and follow visible links and controls by typing their labels.",
   "browser_specific_settings": {
     "gecko": {
@@ -11,14 +11,33 @@
     },
     "gecko_android": { "strict_min_version": "142.0" }
   },
+  "icons": {
+    "16": "icons/key-16.png",
+    "32": "icons/key-32.png",
+    "48": "icons/key-48.png",
+    "64": "icons/key-64.png",
+    "96": "icons/key-96.png",
+    "128": "icons/key-128.png"
+  },
+  "action": {
+    "default_title": "Meme Keyboard Navigation",
+    "default_popup": "popup.html",
+    "default_area": "navbar",
+    "default_icon": {
+      "16": "icons/key-16.png",
+      "32": "icons/key-32.png",
+      "48": "icons/key-48.png",
+      "64": "icons/key-64.png"
+    }
+  },
   "permissions": ["storage"],
   "host_permissions": ["http://*/*", "https://*/*", "file:///*"],
-  "background": { "scripts": ["background.js"] },
+  "background": { "scripts": ["shortcuts.js", "background.js"] },
   "content_scripts": [{
     "matches": ["http://*/*", "https://*/*", "file:///*"],
     "all_frames": true,
     "match_about_blank": true,
     "run_at": "document_start",
-    "js": ["targets.js", "hints.js", "keys.js"]
+    "js": ["shortcuts.js", "targets.js", "hints.js", "keys.js"]
   }]
 }

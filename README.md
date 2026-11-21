@@ -1,43 +1,45 @@
 # Meme Keyboard Navigation
 
-A Firefox extension for browsing with one hand on the keyboard. Press `a` on a page to put a small letter label on each visible link and control. Type a label to activate it.
+Browse Firefox from the keyboard. Press `a` on a web page, then type the label beside a visible link or button to click it. The pixel-art `a` in the toolbar opens the controls for the current tab and the shortcut editor.
 
 ## Install
 
-Download the XPI from the [GitHub releases](https://github.com/JustKato/meme-extension/releases/latest).
+Download the XPI from the [latest GitHub release](https://github.com/JustKato/meme-extension/releases/latest). Desktop Firefox 140 or later is supported.
 
-- For an XPI ending in `-unsigned.xpi`, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the downloaded file. It stays active until you restart Firefox.
-- When a release includes a Mozilla-signed `.xpi`, open `about:addons`, choose the gear menu, then **Install Add-on From File** for a persistent installation.
+- For a file ending in `-unsigned.xpi`, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select the XPI. It stays active until Firefox restarts.
+- For a Mozilla-signed XPI, open `about:addons`, choose the gear menu, then **Install Add-on From File**.
 
-Open a regular website to try the keys. Firefox reserves its settings pages, PDF viewer and some Mozilla sites. Desktop Firefox 140 or later is supported. [Firefox compatibility](docs/keyboard.md#firefox-compatibility)
+Click the purple **a** keycap at the top right. If it is hidden, open Firefox's **Extensions** menu, choose the gear beside **Meme Keyboard Navigation**, and select **Pin to Toolbar**. [Firefox toolbar help](https://support.mozilla.org/en-US/kb/extensions-button)
 
 ## Controls
 
-| Key | Action |
+| Default key | Action |
 | --- | --- |
-| `q` | Turn navigation off or on for the current tab. New tabs start enabled. |
+| `q` | Toggle navigation for the current tab. |
 | `j` / `k` | Scroll down / up one line. Hold to repeat. |
 | `f` / `b` | Scroll down / up one page. |
 | `g` / `G` | Jump to the top / bottom of the scrolling area. |
-| `a` | Show labels for visible links, buttons and other interactive controls. |
-| `Esc` | Leave hint mode. |
-| `Backspace` | Remove the last letter of a partially typed label. |
-| `Enter` | Activate a complete label that is also the start of a longer one. |
+| `t` / `x` | Open a new tab / close the current tab. |
+| `h` / `l` | Switch one tab left / right. |
+| `Ctrl+h` / `Ctrl+l` | Go back / forward in the current tab's history with focus on the web page. |
+| `a` | Show labels on visible links and controls. |
+| `Esc` / `Backspace` | Leave hint mode / erase the last letter of a hint. |
+| `Enter` | Select an exact hint when longer labels share its prefix. |
 
-Keys are case-sensitive. In text fields, editors and native selects, typing belongs to the page. Shortcuts with Ctrl, Alt or Meta also pass through.
+On a page with 27 controls, the first control is labeled `a` and the last is `aa`. After opening hints, type `a` then Enter for the first, or `aa` for the last. An unambiguous label activates as soon as you finish typing it.
 
-Labels follow page order, starting at `a` and continuing through `z`, `aa`, `ab`, and so on. With 27 controls, press `a` to open the hints. Type `aa` to click the 27th control, or type `a` and press Enter to click the first. A complete, unambiguous label activates immediately. Inside hint mode, `q` is a label letter. Press Esc first to use the toggle.
+Open the toolbar popup and choose **Customize** under **Shortcuts**. Click a keycap and press a new shortcut, or use the switch beside that action to disable it. Your shortcut settings apply across tabs. The main navigation switch affects only the current tab. The address bar, protected pages and text editors keep their usual shortcuts. [Keyboard settings and Firefox compatibility](docs/keyboard.md)
 
 ## Development
 
-Use Node.js 24.22.1 or later in the 24.x line, Firefox, and geckodriver on your PATH.
+Use Node.js 24.22.1 or later in the 24.x line, Firefox and geckodriver on your PATH.
 
 ```sh
 npm ci
 npm test
 ```
 
-The test command lints the extension, builds an XPI into `dist/`, then installs that XPI into a fresh headless Firefox profile and exercises the keyboard controls. To try a working copy interactively, load `extension/manifest.json` as a temporary add-on.
+The test command lints the extension, builds an XPI into `dist/` and runs Firefox against the packaged add-on. To try a working copy interactively, load `extension/manifest.json` as a temporary add-on.
 
-- [Keyboard behavior, supported elements and site compatibility](docs/keyboard.md)
 - [Local testing, GitHub Actions and release signing](docs/development.md)
+- [Pixel-art keycap logos](docs/logos/README.md)

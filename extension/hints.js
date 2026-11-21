@@ -97,7 +97,9 @@ const PageHints = (() => {
     }
     ui.badges.replaceChildren(fragment);
     const exact = prefix && entries.some(e => e.label === prefix);
-    ui.message.textContent = message || (exact ? `Enter selects "${prefix}"` : prefix);
+    const confirm = session.confirmKey;
+    const prompt = confirm ? `${confirm} selects "${prefix}"` : "Short label confirmation is off";
+    ui.message.textContent = message || (exact ? prompt : prefix);
   }
 
   function schedule() {
@@ -142,9 +144,9 @@ const PageHints = (() => {
     render(targets.length ? "" : "No visible links or controls");
   }
 
-  function open() {
+  function open(confirmKey) {
     clearNotice();
-    session = { ui: layer(), labels: new WeakMap(), next: 0, prefix: "", entries: [], roots: [],
+    session = { ui: layer(), confirmKey, labels: new WeakMap(), next: 0, prefix: "", entries: [], roots: [],
       observer: new MutationObserver(schedule), listeners: null, raf: 0 };
     refresh();
     if (!session.entries.length) {
@@ -175,13 +177,19 @@ const PageHints = (() => {
     HintTargets.activate(current);
   }
 
-  function handle(key) {
-    if (key === "Escape") {
+  function setConfirmKey(key) {
+    if (!session || session.confirmKey === key) return;
+    session.confirmKey = key;
+    render();
+  }
+
+  function handle(action, key) {
+    if (action === "cancelHint") {
       close();
-    } else if (key === "Backspace") {
+    } else if (action === "editHint") {
       session.prefix = session.prefix.slice(0, -1);
       render();
-    } else if (key === "Enter") {
+    } else if (action === "confirmHint") {
       const exact = session.entries.find(e => e.label === session.prefix);
       if (exact) select(exact);
     } else if (/^[a-z]$/.test(key)) {
@@ -195,12 +203,8 @@ const PageHints = (() => {
       } else {
         render(`No match for "${prefix}"`);
       }
-    } else {
-      if (key === "Tab") close();
-      return false;
     }
-    return true;
   }
 
-  return { open, close, handle, notify, clearNotice, get active() { return session !== null; } };
+  return { open, close, handle, notify, clearNotice, setConfirmKey, get active() { return session !== null; } };
 })();

@@ -2,7 +2,7 @@
 
 ## Run locally
 
-Install Node.js 24.22.1 or newer in the 24.x line, desktop Firefox 140 or later and geckodriver. Use the versions in `package-lock.json` with `npm ci`.
+Install Node.js 24.22.1 or newer in the 24.x line, desktop Firefox 140 or later and a geckodriver that supports `--allow-system-access` for the toolbar tests. CI uses geckodriver 0.37.1. Use the versions in `package-lock.json` with `npm ci`.
 
 | Command | Result |
 | --- | --- |
@@ -10,7 +10,7 @@ Install Node.js 24.22.1 or newer in the 24.x line, desktop Firefox 140 or later 
 | `npm run build` | Write `dist/meme-extension-<version>-unsigned.xpi` with the manifest at the archive root. |
 | `npm test` | Lint, build, temporarily install the archive and send WebDriver keystrokes to local HTTP fixtures in Firefox. |
 
-The tests use a disposable Firefox profile and bind their fixture server to the loopback interface. Set `FIREFOX_BIN` or `GECKODRIVER_BIN` to an absolute executable path when using a custom installation. For interactive debugging, use **This Firefox** in `about:debugging`, load `extension/manifest.json`, and click **Reload** after editing. Refresh the page being tested.
+The tests use a disposable Firefox profile and bind their fixture server to the loopback interface. Set `FIREFOX_BIN` or `GECKODRIVER_BIN` to an absolute executable path when using a custom installation. For interactive debugging, use **This Firefox** in `about:debugging`, load `extension/manifest.json`, and click **Reload** after editing. Refresh the page being tested and reopen the toolbar popup to reload its HTML and scripts.
 
 ## Source layout
 
@@ -19,8 +19,12 @@ The tests use a disposable Firefox profile and bind their fixture server to the 
 | `extension/keys.js` | Case-sensitive shortcuts, editable contexts, scroll targeting and key repeat. |
 | `extension/targets.js` | Composed document order, frame geometry, visibility checks and DOM activation. |
 | `extension/hints.js` | Label assignment, prefix matching, overlay placement and live page updates. |
-| `extension/background.js` | Tab-scoped enable flags and synchronization across frames. |
-| `tests/firefox.test.cjs` | End-to-end tests of the packaged extension in Firefox. |
+| `extension/background.js` | Per-tab navigation state, tab operations and history navigation. |
+| `extension/shortcuts.js` | Default bindings and shared shortcut handling. |
+| `extension/popup.html`, `popup.js`, `popup.css` | Firefox toolbar popup, tab switch and shortcut editor. |
+| `extension/icons/` | Pixel-art keycap at toolbar and Add-ons Manager sizes. The alternate PNGs live in [the logo gallery](logos/README.md). |
+| `tests/firefox.test.cjs` | Firefox fixtures, toolbar popup tests and page interaction tests. |
+| `tests/shortcut-cases.cjs` | Tab and history navigation, persistent remapping, disabling and restoring shortcuts. |
 
 ## GitHub Actions
 

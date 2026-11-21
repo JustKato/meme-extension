@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meme Keyboard Navigation</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="shortcuts.js" defer></script>
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header class="identity">
+    <img src="icons/key-48.png" srcset="icons/key-48.png 1x, icons/key-96.png 2x" width="48" height="48" alt="">
+    <h1>Meme <span>Keyboard Navigation</span></h1>
+  </header>
+
+  <main id="menu">
+    <button id="tab-toggle" type="button" role="switch" aria-checked="false" aria-labelledby="tab-label" aria-describedby="tab-status" disabled>
+      <span class="toggle-copy">
+        <strong id="tab-label">Keyboard navigation</strong>
+        <span id="tab-status" role="status">Checking this page...</span>
+      </span>
+      <span class="track" aria-hidden="true"></span>
+    </button>
+
+    <section class="quick-reference" aria-labelledby="shortcuts-title">
+      <div class="section-heading">
+        <h2 id="shortcuts-title">Shortcuts</h2>
+        <button class="text-button" id="open-shortcuts" type="button">Customize</button>
+      </div>
+      <dl>
+        <div><dt>Show link hints</dt><dd><kbd data-key="hints"></kbd></dd></div>
+        <div><dt>Scroll down / up</dt><dd><kbd data-key="scrollDown"></kbd> <kbd data-key="scrollUp"></kbd></dd></div>
+        <div><dt>Page down / up</dt><dd><kbd data-key="pageDown"></kbd> <kbd data-key="pageUp"></kbd></dd></div>
+        <div><dt>Jump to top / bottom</dt><dd><kbd data-key="top"></kbd> <kbd data-key="bottom"></kbd></dd></div>
+        <div><dt>Toggle this tab</dt><dd><kbd data-key="toggle"></kbd></dd></div>
+      </dl>
+    </section>
+
+    <details>
+      <summary>Tabs and history</summary>
+      <dl>
+        <div><dt>Open / close tab</dt><dd><kbd data-key="newTab"></kbd> <kbd data-key="closeTab"></kbd></dd></div>
+        <div><dt>Previous / next tab</dt><dd><kbd data-key="previousTab"></kbd> <kbd data-key="nextTab"></kbd></dd></div>
+        <div><dt>Go back / forward</dt><dd><kbd data-key="back"></kbd> <kbd data-key="forward"></kbd></dd></div>
+      </dl>
+    </details>
+    <details>
+      <summary>Hint controls</summary>
+      <dl>
+        <div><dt>Exit hints</dt><dd><kbd data-key="cancelHint"></kbd></dd></div>
+        <div><dt>Erase last letter</dt><dd><kbd data-key="editHint"></kbd></dd></div>
+        <div><dt>Choose an exact label</dt><dd><kbd data-key="confirmHint"></kbd></dd></div>
+      </dl>
+    </details>
+  </main>
+
+  <main id="editor" hidden>
+    <div class="editor-heading">
+      <button class="back" id="close-shortcuts" type="button" aria-label="Back to menu"></button>
+      <h2>Customize shortcuts</h2>
+    </div>
+    <div id="binding-view">
+      <p class="instructions">Keys and switches apply to all tabs.</p>
+      <div id="binding-list"></div>
+      <div class="editor-footer">
+        <button id="reset-shortcuts" class="text-button" type="button">Restore defaults</button>
+        <div id="reset-panel" hidden>
+          <p>Restore all keys and turn every shortcut on?</p>
+          <div class="actions">
+            <button id="cancel-reset" class="secondary" type="button">Cancel</button>
+            <button id="confirm-reset" class="primary" type="button">Restore</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <section id="recorder" aria-labelledby="record-title" hidden>
+      <h3 id="record-title"></h3>
+      <button id="capture-shortcut" type="button" aria-describedby="capture-tip">Press a shortcut</button>
+      <p id="capture-tip" class="instructions">Press the key or combination you want to use.</p>
+      <form id="manual-form">
+        <label for="manual-shortcut">Type a shortcut</label>
+        <div class="manual-row">
+          <input type="text" id="manual-shortcut" placeholder="e.g. Ctrl+l" autocomplete="off" spellcheck="false">
+          <button id="save-shortcut" class="primary" type="submit">Save</button>
+        </div>
+      </form>
+      <button id="cancel-recording" class="text-button" type="button">Cancel</button>
+    </section>
+    <p id="editor-status" role="status"></p>
+  </main>
+  <template id="binding-row">
+    <div class="binding">
+      <span class="binding-name"></span>
+      <button class="binding-key" data-record type="button"></button>
+      <input class="binding-enabled" data-enabled type="checkbox" role="switch">
+    </div>
+  </template>
+</body>
+</html>
