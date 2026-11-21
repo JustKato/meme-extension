@@ -1,6 +1,8 @@
-# Meme Keyboard Navigation
+# <a name="meme-keyboard-navigation"></a><picture><img src="docs/images/readme/banner.png" alt="Meme Keyboard Navigation"></picture>
 
 Browse Firefox from the keyboard. Press `a` on a web page, then type the label beside a visible link or button to click it. The pixel-art `a` in the toolbar opens the controls for the current tab and the shortcut editor.
+
+<picture><img src="docs/images/readme/install.png" alt=""></picture>
 
 ## Install
 
@@ -10,6 +12,8 @@ Download the XPI from the [latest GitHub release](https://github.com/JustKato/me
 - For a Mozilla-signed XPI, open `about:addons`, choose the gear menu, then **Install Add-on From File**.
 
 Click the purple **a** keycap at the top right. If it is hidden, open Firefox's **Extensions** menu, choose the gear beside **Meme Keyboard Navigation**, and select **Pin to Toolbar**. [Firefox toolbar help](https://support.mozilla.org/en-US/kb/extensions-button)
+
+<picture><img src="docs/images/readme/controls.png" alt=""></picture>
 
 ## Controls
 
@@ -29,6 +33,8 @@ Click the purple **a** keycap at the top right. If it is hidden, open Firefox's 
 On a page with 27 controls, the first control is labeled `a` and the last is `aa`. After opening hints, type `a` then Enter for the first, or `aa` for the last. An unambiguous label activates as soon as you finish typing it.
 
 Open the toolbar popup and choose **Customize** under **Shortcuts**. Click a keycap and press a new shortcut, or use the switch beside that action to disable it. Your shortcut settings apply across tabs. The main navigation switch affects only the current tab. The address bar, protected pages and text editors keep their usual shortcuts. [Keyboard settings and Firefox compatibility](docs/keyboard.md)
+
+<picture><img src="docs/images/readme/development.png" alt=""></picture>
 
 ## Development
 
