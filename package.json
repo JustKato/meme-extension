@@ -1,0 +1,17 @@
+{
+  "name": "meme-extension",
+  "private": true,
+  "description": "Keyboard navigation for Firefox",
+  "scripts": {
+    "lint": "web-ext lint --source-dir extension --warnings-as-errors",
+    "build": "web-ext build --source-dir extension --artifacts-dir dist --filename meme-extension-{version}-unsigned.xpi --overwrite-dest",
+    "test": "npm run lint && npm run build && node --test tests/*.test.cjs"
+  },
+  "engines": {
+    "node": "^24.22.1 || >=26.12.1"
+  },
+  "devDependencies": {
+    "selenium-webdriver": "4.53.0",
+    "web-ext": "10.8.0"
+  }
+}

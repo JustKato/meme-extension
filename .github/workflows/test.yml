@@ -1,0 +1,44 @@
+name: Test
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  firefox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        firefox: [stable, 140.0esr]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install minimum supported desktop Firefox
+        if: matrix.firefox == '140.0esr'
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://archive.mozilla.org/pub/firefox/releases/140.0esr/linux-x86_64/en-US/firefox-140.0esr.tar.xz \
+            --output "$RUNNER_TEMP/firefox-esr.tar.xz"
+          tar -xJf "$RUNNER_TEMP/firefox-esr.tar.xz" -C "$RUNNER_TEMP"
+          echo "FIREFOX_BIN=$RUNNER_TEMP/firefox/firefox" >> "$GITHUB_ENV"
+      - name: Lint, package and test in Firefox
+        run: |
+          "${FIREFOX_BIN:-firefox}" --version
+          geckodriver --version
+          npm test
+      - if: matrix.firefox == 'stable'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: firefox-xpi
+          path: dist/*.xpi
+          if-no-files-found: error
+          retention-days: 7
