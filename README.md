@@ -1,4 +1,6 @@
-# <a name="meme-keyboard-navigation"></a><picture><img src="docs/images/readme/banner.png" alt="Meme Keyboard Navigation"></picture>
+<picture><img src="docs/images/readme/banner.png" alt="A purple keyboard with the golden a key floating above its switch."></picture>
+
+# Meme Keyboard Navigation
 
 Browse Firefox from the keyboard. Press `a` on a web page, then type the label beside a visible link or button to click it. The pixel-art `a` in the toolbar opens the controls for the current tab and the shortcut editor.
 
