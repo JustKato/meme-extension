@@ -4,6 +4,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { Builder, Key } = require("selenium-webdriver");
 const firefox = require("selenium-webdriver/firefox");
+const { Command } = require("selenium-webdriver/lib/command");
 const manifest = require("../extension/manifest.json");
 
 let driver, server, origin, markup = "";
@@ -17,6 +18,7 @@ function page(body) {
 before(async () => {
   server = http.createServer((req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (req.url === "/strict-css") res.setHeader("Content-Security-Policy", "style-src 'none'");
     res.end(page(req.url.startsWith("/child") ? child : markup));
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -28,8 +30,10 @@ before(async () => {
   const service = new firefox.ServiceBuilder(process.env.GECKODRIVER_BIN || "geckodriver").setHostname("127.0.0.1");
   driver = await new Builder().forBrowser("firefox").setFirefoxOptions(options).setFirefoxService(service).build();
   await driver.manage().window().setRect({ width: 1100, height: 820 });
-  await driver.installWebExtension(path.resolve("dist", `meme-extension-${manifest.version}-unsigned.xpi`),
-    { permanent: false });
+  // Firefox 140 reads scripts lazily. Keep the XPI on disk for the whole session
+  // by passing geckodriver its local path instead of uploading a temporary copy.
+  const xpi = path.resolve("dist", `meme-extension-${manifest.version}-unsigned.xpi`);
+  await driver.execute(new Command("install addon").setParameter("path", xpi).setParameter("temporary", true));
 });
 
 after(async () => {
@@ -37,9 +41,11 @@ after(async () => {
   finally { if (server) await new Promise(resolve => server.close(resolve)); }
 });
 
-async function load(html) {
+async function load(html, pathname = "/") {
   markup = html;
-  await driver.get(origin + "/");
+  await driver.get(origin + pathname);
+  // Send the first key after the fixture has actually reached the screen.
+  await js("return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
 }
 const js = (script, ...args) => driver.executeScript(script, ...args);
 const keys = (...list) => driver.actions().sendKeys(...list).perform();
@@ -231,11 +237,14 @@ test("clicks respect new-tab links, form submission and canceled site handlers",
     <form action="/submit"><button name="from" value="hint">Submit</button></form>
     <a href="/ignored" onclick="event.preventDefault();this.dataset.stayed='yes'">Canceled</a>`);
   const initial = await driver.getWindowHandle();
-  await keys("a", "a");
-  await until(async () => (await driver.getAllWindowHandles()).length === 2, "link opens a new tab");
-  const other = (await driver.getAllWindowHandles()).find(handle => handle !== initial);
+  const previous = new Set(await driver.getAllWindowHandles());
+  await keys("a");
+  await expectLabels(["a", "b", "c"]);
+  await keys("a");
+  const other = await until(async () =>
+    (await driver.getAllWindowHandles()).find(handle => !previous.has(handle)), "link opens a new tab");
   await driver.switchTo().window(other);
-  assert.equal(await driver.getCurrentUrl(), origin + "/destination");
+  await until(async () => await driver.getCurrentUrl() === origin + "/destination", "new tab loads destination");
   await driver.close();
   await driver.switchTo().window(initial);
   await keys("a", "c");
@@ -243,4 +252,16 @@ test("clicks respect new-tab links, form submission and canceled site handlers",
   assert.equal(await driver.getCurrentUrl(), origin + "/");
   await keys("a", "b");
   await until(async () => await driver.getCurrentUrl() === origin + "/submit?from=hint", "native form submits");
+});
+
+test("hint styling and hit testing work on a page with a strict style policy", async () => {
+  await load('<button>Start</button><a href="#finish">Finish</a>', "/strict-css");
+  await keys("a");
+  await expectLabels(["a", "b"]);
+  const styles = await js(`const host=document.querySelector("[popover]");
+    const badge=host.shadowRoot.querySelector(".badge");
+    return [getComputedStyle(host).pointerEvents,getComputedStyle(badge).position,badge.offsetHeight]`);
+  assert.deepEqual(styles, ["none", "absolute", 18]);
+  await keys("b");
+  assert.equal(await js("return location.hash"), "#finish");
 });

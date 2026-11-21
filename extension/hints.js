@@ -23,22 +23,18 @@ const PageHints = (() => {
     .message:empty { display: none; }
   `;
 
-  let sheet;
   function layer() {
     const host = document.createElement("div");
     host.setAttribute("popover", "manual");
     const shadow = host.attachShadow({ mode: "open" });
-    if (!sheet) {
-      sheet = new CSSStyleSheet();
-      sheet.replaceSync(css);
-    }
-    shadow.adoptedStyleSheets = [sheet];
+    const style = document.createElement("style");
+    style.textContent = css;
     const badges = document.createElement("div");
     badges.setAttribute("aria-hidden", "true");
     const message = document.createElement("div");
     message.className = "message";
     message.setAttribute("role", "status");
-    shadow.append(badges, message);
+    shadow.append(style, badges, message);
     (document.fullscreenElement || document.documentElement).append(host);
     host.showPopover();
     return { host, badges, message };
